@@ -1,6 +1,7 @@
 import javafx.util.Pair;
 
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Scanner;
 import java.util.Set;
 
@@ -18,6 +19,20 @@ final class Move {
     Move(int row, int column) {
         this.row = row;
         this.column = column;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Move move = (Move) o;
+        return row == move.row &&
+                column == move.column;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(row, column);
     }
 }
 
@@ -69,9 +84,7 @@ public class Game {
 
             for (int j = 0; j < boardSize; j++) {
                 System.out.print("|");
-                if (board[i][j] == Placeholder.EMPTY) {
-                    System.out.print(" ");
-                }
+                System.out.print(board[i][j]);
             }
             System.out.println();
 
@@ -79,13 +92,19 @@ public class Game {
     }
 
     private boolean playMove(Move move, Placeholder placeholder) {
-        if (!movesRemaining.contains(move)) {
+        if (!moveIsValid(move)) {
             return false;
         }
 
         movesRemaining.remove(move);
         exploreMove(move, placeholder);
+
         return true;
+
+    }
+
+    private boolean moveIsValid(Move move) {
+        return movesRemaining.contains(move) && (board[move.row][move.column] == Placeholder.EMPTY);
     }
 
     private void exploreMove(Move move, Placeholder placeholder) {
@@ -174,7 +193,8 @@ public class Game {
         return GameState.NOT_OVER;
     }
 
-    private Move enterMove() {
+    private static Move enterMove() {
+        System.out.print("Enter your move <row> <column>: ");
         int row = input.nextInt();
         int column = input.nextInt();
 
@@ -190,56 +210,81 @@ public class Game {
 
     private Pair<Integer, Move> minMax(Set<Move> movesRemaining, int depth, int alpha, int beta, boolean maximizingPlayer) {
         GameState gameState = getGameState();
-        if (gameState.equals(GameState.DRAW)) {
-            return new Pair<>((0 - depth), null);
-        } else if (gameState.equals(GameState.FIRST_PLAYER_WINS)) {
-            return new Pair<>((1000 - depth), null);
-        } else if (gameState.equals(GameState.SECOND_PLAYER_WINS)) {
-            return new Pair<>((-1000 - depth), null);
+
+        int score = 0;
+
+        if (maximizingPlayer) {
+            if (gameState.equals(GameState.DRAW)) {
+                score = -depth;
+            } else if (gameState.equals(GameState.FIRST_PLAYER_WINS)) {
+                score = 1000 - depth;
+            } else if (gameState.equals(GameState.SECOND_PLAYER_WINS)) {
+                score = -1000 + depth;
+            }
+        } else {
+            if (gameState.equals(GameState.DRAW)) {
+                score = +depth;
+            } else if (gameState.equals(GameState.FIRST_PLAYER_WINS)) {
+                score = 1000 - depth;
+            } else if (gameState.equals(GameState.SECOND_PLAYER_WINS)) {
+                score = -1000 + depth;
+            }
+        }
+
+        if (!gameState.equals(GameState.NOT_OVER)) {
+            return new Pair<>(score, null);
         }
 
         if (maximizingPlayer) {
             int maxEval = Integer.MIN_VALUE;
             Move bestMove = null;
+
             for (Move move : movesRemaining) {
                 Set<Move> subset = new HashSet<>(movesRemaining);
                 subset.remove(move);
                 exploreMove(move, Placeholder.FIRST_PLAYER);
+
                 Pair<Integer, Move> result = minMax(subset, depth + 1, alpha, beta, false);
-                int eval = result.getKey();
                 undoMove(move);
+
+                int eval = result.getKey();
                 if (maxEval < eval) {
                     maxEval = eval;
                     bestMove = move;
                 }
+
                 alpha = Math.max(alpha, eval);
                 if (alpha >= beta) {
                     break;
                 }
             }
 
-            return new Pair<Integer, Move>(maxEval, bestMove);
+            return new Pair<>(maxEval, bestMove);
         } else {
             int minEval = Integer.MAX_VALUE;
             Move bestMove = null;
+
             for (Move move : movesRemaining) {
                 Set<Move> subset = new HashSet<>(movesRemaining);
                 subset.remove(move);
                 exploreMove(move, Placeholder.SECOND_PLAYER);
+
                 Pair<Integer, Move> result = minMax(subset, depth + 1, alpha, beta, true);
-                int eval = result.getKey();
                 undoMove(move);
+
+                int eval = result.getKey();
                 if (minEval > eval) {
                     minEval = eval;
                     bestMove = move;
                 }
+
                 beta = Math.min(beta, eval);
                 if (alpha >= beta) {
                     break;
                 }
             }
 
-            return new Pair<Integer, Move>(minEval, bestMove);
+            return new Pair<>(minEval, bestMove);
         }
     }
 
@@ -251,11 +296,15 @@ public class Game {
         while (true) {
             if (personIsOnTheMove) {
                 printBoard();
-                personIsOnTheMove = false;
                 move = enterMove();
+                if (!moveIsValid(move)) {
+                    System.err.println("Invalid move");
+                    continue;
+                }
+                personIsOnTheMove = false;
             } else {
-                personIsOnTheMove = true;
                 move = getBestMove(firstPlayer);
+                personIsOnTheMove = true;
             }
             if (firstPlayer) {
                 placeholder = Placeholder.FIRST_PLAYER;
